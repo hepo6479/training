@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>スピーカ磁気回路解析</title>
+<style>
+:root{
+  --bg:#f4f5f7; --panel:#fff; --ink:#1d2330; --sub:#5d6677; --line:#dde1e8; --soft:#eef0f4;
+  --accent:#2c5fd6; --accent-ink:#fff; --ok:#1d8a4e; --warn:#b7791f; --bad:#c53030;
+  --iron:#8d99ae; --iron-stroke:#4a5568; --mag:#d9534f; --coil:#e8a33d; --air:transparent;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:13px/1.5 "Segoe UI","Hiragino Sans","Yu Gothic UI","Meiryo",system-ui,sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+header h1{font-size:15px;margin:0;font-weight:600}
+.badge{font-size:11px;padding:2px 8px;border-radius:10px;background:var(--soft);color:var(--sub);font-weight:600}
+.badge.femm{background:#e3f4ea;color:var(--ok)}
+.badge.mock{background:#fdf0dc;color:var(--warn)}
+#status{margin-left:auto;color:var(--sub)}
+main{display:grid;grid-template-columns:290px minmax(360px,1fr) 400px;grid-template-rows:minmax(0,1fr) auto;gap:10px;padding:10px;height:calc(100% - 41px)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:auto;min-height:0}
+.panel h2{font-size:12px;margin:0;padding:8px 12px;border-bottom:1px solid var(--line);color:var(--sub);font-weight:600;letter-spacing:.03em;position:sticky;top:0;background:var(--panel);z-index:1}
+#left{grid-row:1}
+#center{grid-row:1;display:flex;flex-direction:column}
+#right{grid-row:1}
+#bottom{grid-column:1 / -1;max-height:30vh}
+fieldset{border:0;margin:0;padding:6px 12px 8px;border-bottom:1px solid var(--soft)}
+legend{font-weight:600;font-size:12px;padding:6px 0 2px}
+.row{display:grid;grid-template-columns:1fr 92px 28px;align-items:center;gap:6px;margin:3px 0}
+.row label{color:var(--ink)}
+.row .u{color:var(--sub);font-size:11px}
+.row input,.row select{width:100%;padding:3px 6px;border:1px solid var(--line);border-radius:4px;font:inherit;font-family:var(--mono);background:#fff}
+.row select{font-family:inherit}
+.row.wide{grid-template-columns:1fr 120px}
+.row input.bad{border-color:var(--bad);background:#fff5f5}
+.hint{grid-column:1 / -1;color:var(--sub);font-size:11px;margin-top:-2px}
+#errors{margin:8px 12px;padding:0;list-style:none;color:var(--bad);font-size:12px}
+#errors li{margin:2px 0}
+#errors li::before{content:"⚠ "}
+.actions{padding:8px 12px 14px;display:flex;gap:8px;position:sticky;bottom:0;background:var(--panel);border-top:1px solid var(--soft)}
+button{font:inherit;border:1px solid var(--line);background:#fff;border-radius:5px;padding:4px 10px;cursor:pointer;color:var(--ink)}
+button:hover:not(:disabled){background:var(--soft)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600;padding:7px 18px;flex:1}
+button.primary:hover:not(:disabled){filter:brightness(1.08);background:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+#svgwrap{position:relative;flex:1;min-height:0}
+#section{width:100%;height:100%;display:block}
+#section .part{stroke:var(--iron-stroke);stroke-width:.06;vector-effect:non-scaling-stroke}
+#section text{font-size:.9px;fill:var(--sub);pointer-events:none}
+.legendbar{display:flex;align-items:center;gap:8px;padding:6px 12px;border-top:1px solid var(--line);color:var(--sub);font-size:11px;min-height:34px}
+#cbar{height:10px;width:200px;border-radius:2px;border:1px solid var(--line)}
+#mapnote{margin-left:auto}
+#tip{position:absolute;pointer-events:none;background:rgba(20,24,33,.92);color:#fff;font:11px/1.4 var(--mono);padding:5px 8px;border-radius:4px;white-space:pre;display:none;z-index:5}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 12px}
+.card{border:1px solid var(--line);border-radius:6px;padding:6px 10px}
+.card .k{color:var(--sub);font-size:11px}
+.card .v{font:600 20px/1.3 var(--mono)}
+.card .v small{font-size:11px;font-weight:400;color:var(--sub);margin-left:3px}
+.card .d{font-size:11px;font-family:var(--mono)}
+.d.up{color:var(--ok)} .d.down{color:var(--bad)}
+.sec{padding:4px 12px 10px}
+.sec h3{font-size:12px;margin:8px 0 4px;font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{padding:3px 6px;border-bottom:1px solid var(--soft);text-align:right;white-space:nowrap}
+th{color:var(--sub);font-weight:600;font-size:11px}
+th:first-child,td:first-child{text-align:left}
+td.num{font-family:var(--mono)}
+.chip{display:inline-block;padding:0 7px;border-radius:9px;font-size:11px;font-weight:600}
+.chip.OK{background:#e3f4ea;color:var(--ok)} .chip.注意{background:#fdf0dc;color:var(--warn)} .chip.飽和{background:#fde2e2;color:var(--bad)}
+.chart{width:100%;height:190px;display:block}
+.chart text{font-size:10px;fill:var(--sub);font-family:var(--mono)}
+.chart .grid{stroke:var(--soft)}
+.chart .axis{stroke:#aab1bd}
+.empty{color:var(--sub);padding:24px 12px;text-align:center}
+#hist td.chg{text-align:left;white-space:normal;color:var(--sub);min-width:220px}
+#hist tr.cur td{background:#f1f5ff}
+.histbar{display:flex;align-items:center;gap:8px}
+.histbar span{margin-left:auto;font-weight:400}
+.spinner{display:inline-block;width:11px;height:11px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp 1s linear infinite;vertical-align:-1px;margin-right:4px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (max-width:1100px){
+  main{grid-template-columns:1fr;grid-template-rows:auto;height:auto}
+  #left,#center,#right,#bottom{grid-row:auto;grid-column:auto;max-height:none}
+  #center{height:70vh}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>内磁型スピーカ磁気回路解析</h1>
+  <span id="backend" class="badge">…</span>
+  <span id="status"></span>
+</header>
+<main>
+  <section id="left" class="panel">
+    <h2>パラメータ（単位 mm）</h2>
+    <form id="form" autocomplete="off"></form>
+    <ul id="errors"></ul>
+    <div class="actions">
+      <button id="run" class="primary" type="button">解析</button>
+      <button id="reset" type="button" title="基準値に戻す">基準値</button>
+    </div>
+  </section>
+
+  <section id="center" class="panel">
+    <h2>断面図（軸対称・全断面表示）</h2>
+    <div id="svgwrap">
+      <svg id="section" preserveAspectRatio="xMidYMid meet"></svg>
+      <div id="tip"></div>
+    </div>
+    <div class="legendbar">
+      <span>|B|</span><span>0</span><canvas id="cbar" width="200" height="10"></canvas><span id="cbarmax">2.0 T</span>
+      <span id="mapnote"></span>
+    </div>
+  </section>
+
+  <section id="right" class="panel">
+    <h2>解析結果</h2>
+    <div id="results"><div class="empty">「解析」を押すと結果が表示されます</div></div>
+  </section>
+
+  <section id="bottom" class="panel">
+    <h2 class="histbar">解析履歴 <span id="histcount"></span><button id="clearhist" type="button">全削除</button></h2>
+    <div id="history"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+// ------------------------------------------------------------ パラメータ定義
+const FIELDS = [
+  {g:"マグネット", k:"magnet_type", label:"種類", type:"select", opts:["NdFeB","Ferrite"]},
+  {g:"マグネット", k:"br", label:"残留磁束密度 Br", unit:"T", step:0.01},
+  {g:"マグネット", k:"magnet_r", label:"半径", unit:"mm", step:0.5, hint:p=>`φ${fmt(p.magnet_r*2,1)}`},
+  {g:"マグネット", k:"magnet_t", label:"厚さ", unit:"mm", step:0.5},
+  {g:"トッププレート", k:"plate_r", label:"半径", unit:"mm", step:0.5, hint:p=>`φ${fmt(p.plate_r*2,1)}`},
+  {g:"トッププレート", k:"plate_t", label:"厚さ", unit:"mm", step:0.1},
+  {g:"ギャップ・ヨーク", k:"gap", label:"ギャップ幅", unit:"mm", step:0.05},
+  {g:"ギャップ・ヨーク", k:"yoke_wall", label:"側壁厚", unit:"mm", step:0.1, hint:p=>`ヨーク外径 φ${fmt(2*(p.plate_r+p.gap+p.yoke_wall),1)}`},
+  {g:"ギャップ・ヨーク", k:"yoke_bottom", label:"底厚", unit:"mm", step:0.1},
+  {g:"ギャップ・ヨーク", k:"iron", label:"鉄材質", type:"select", opts:["1010 Steel"]},
+  {g:"ボイスコイル", k:"coil_h", label:"巻き高さ", unit:"mm", step:0.5, hint:p=>`オーバーハング ${fmt((p.coil_h-p.plate_t)/2,2)} mm`},
+  {g:"ボイスコイル", k:"coil_turns", label:"巻数", unit:"T", step:1},
+  {g:"ボイスコイル", k:"coil_offset", label:"静止位置のずれ", unit:"mm", step:0.1, hint:()=>"+ = 上（プレート上面側）"},
+  {g:"メッシュ", k:"gap_mesh", label:"ギャップのメッシュ", unit:"mm", step:0.01},
+];
+const LABELS = Object.fromEntries(FIELDS.map(f=>[f.k, (f.g==="マグネット"||f.g==="トッププレート"?f.g.replace("トップ","")+" ":"")+f.label]));
+let CFG = {
+  defaults:{magnet_type:"NdFeB",br:1.3,magnet_r:10,magnet_t:5,plate_r:10,plate_t:3,gap:1,yoke_wall:2,yoke_bottom:2.5,
+            iron:"1010 Steel",coil_h:6,coil_turns:60,coil_offset:0,gap_mesh:0.1},
+  magnet_types:{NdFeB:{br_range:[0.9,1.55]},Ferrite:{br_range:[0.2,0.5]}},
+  xmax_ratio:0.82, sat_warn:1.5, sat_limit:1.8, backend:"?"
+};
+const BMAX = 2.0; // カラースケール上限 [T]
+let lastResult = null;
+let running = false;
+
+const $ = s => document.querySelector(s);
+const fmt = (v, d=3) => (v===null||v===undefined||!isFinite(v)) ? "—" : Number(v).toFixed(d);
+const esc = s => String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+// ------------------------------------------------------------ フォーム
+function buildForm(){
+  const form = $("#form"); form.innerHTML = "";
+  let fs = null, cur = null;
+  for (const f of FIELDS){
+    if (f.g !== cur){ cur = f.g; fs = document.createElement("fieldset"); fs.innerHTML = `<legend>${f.g}</legend>`; form.appendChild(fs); }
+    const row = document.createElement("div");
+    row.className = "row" + (f.type==="select" ? " wide" : "");
+    const id = "f_" + f.k;
+    if (f.type === "select"){
+      const opts = f.k==="iron" ? CFG.iron_materials || f.opts : f.opts;
+      row.innerHTML = `<label for="${id}">${f.label}</label><select id="${id}" name="${f.k}">${opts.map(o=>`<option>${esc(o)}</option>`).join("")}</select>`;
+    } else {
+      row.innerHTML = `<label for="${id}">${f.label}</label><input id="${id}" name="${f.k}" type="number" step="${f.step}"><span class="u">${f.unit==="T"&&f.k==="coil_turns"?"回":f.unit}</span>`;
+    }
+    if (f.hint) row.insertAdjacentHTML("beforeend", `<div class="hint" id="h_${f.k}"></div>`);
+    fs.appendChild(row);
+  }
+  form.addEventListener("input", onInput);
+  $("#f_magnet_type").addEventListener("change", () => {
+    const t = $("#f_magnet_type").value, [lo,hi] = CFG.magnet_types[t].br_range;
+    const br = parseFloat($("#f_br").value);
+    if (!(br>=lo && br<=hi)) $("#f_br").value = t==="NdFeB" ? 1.3 : 0.4;
+    onInput();
+  });
+}
+function setParams(p){
+  for (const f of FIELDS){ const el = $("#f_"+f.k); if (el && p[f.k] !== undefined) el.value = p[f.k]; }
+  onInput();
+}
+function readParams(){
+  const p = {};
+  for (const f of FIELDS){
+    const v = $("#f_"+f.k).value;
+    p[f.k] = f.type==="select" ? v : (v.trim()==="" ? NaN : Number(v));
+  }
+  return p;
+}
+// femm_model.validate と同じ規則
+function validate(p){
+  const e = [], bad = new Set();
+  const nums = ["br","magnet_r","magnet_t","plate_r","plate_t","gap","yoke_wall","yoke_bottom","coil_h","coil_turns","gap_mesh"];
+  for (const k of nums) if (!(isFinite(p[k]) && p[k] > 0)){ e.push(`${LABELS[k]} は正の数にしてください`); bad.add(k); }
+  if (!isFinite(p.coil_offset)){ e.push("静止位置のずれが数値ではありません"); bad.add("coil_offset"); }
+  if (e.length) return {e, bad};
+  const [lo,hi] = CFG.magnet_types[p.magnet_type].br_range;
+  if (p.br < lo || p.br > hi){ e.push(`${p.magnet_type} の Br は ${lo}〜${hi} T の範囲にしてください`); bad.add("br"); }
+  if (p.magnet_r > p.plate_r){ e.push("マグネット半径はプレート半径以下にしてください（内磁型）"); bad.add("magnet_r"); bad.add("plate_r"); }
+  if (p.gap_mesh > p.gap/2){ e.push("ギャップのメッシュはギャップ幅の 1/2 以下にしてください"); bad.add("gap_mesh"); }
+  if (p.gap_mesh < 0.01){ e.push("ギャップのメッシュは 0.01 mm 以上にしてください"); bad.add("gap_mesh"); }
+  if (p.coil_h > 50){ e.push("巻き高さが大きすぎます（50 mm 以下）"); bad.add("coil_h"); }
+  if (Math.abs(p.coil_offset) > p.coil_h + p.plate_t){ e.push("静止位置のずれが大きすぎます（|ずれ| ≤ 巻き高さ + プレート厚）"); bad.add("coil_offset"); }
+  if (p.coil_turns > 10000 || Math.round(p.coil_turns) !== p.coil_turns){ e.push("巻数は 10000 以下の整数にしてください"); bad.add("coil_turns"); }
+  return {e, bad};
+}
+function onInput(){
+  const p = readParams(), {e, bad} = validate(p);
+  for (const f of FIELDS){
+    const el = $("#f_"+f.k); el.classList.toggle("bad", bad.has(f.k));
+    const h = $("#h_"+f.k); if (h) h.textContent = e.length && bad.size ? (bad.has(f.k)?"":f.hint(p)) : f.hint(p);
+  }
+  $("#errors").innerHTML = e.map(x=>`<li>${esc(x)}</li>`).join("");
+  $("#run").disabled = e.length > 0 || running;
+  drawSection(e.length ? null : p);
+}
+
+// ------------------------------------------------------------ 形状 (femm_model.geometry と同じ)
+function geom(p){
+  const tb=p.yoke_bottom, zpb=tb+p.magnet_t, ztop=zpb+p.plate_t, Ri=p.plate_r+p.gap, Ro=Ri+p.yoke_wall;
+  return {tb, zpb, ztop, Rm:p.magnet_r, Rp:p.plate_r, Ri, Ro, rgap:p.plate_r+p.gap/2, zcoil:(zpb+ztop)/2+p.coil_offset};
+}
+function partAt(G, r, z){
+  r = Math.abs(r);
+  if (z>=0 && z<=G.tb && r<=G.Ro) return "ヨーク底";
+  if (z>G.tb && z<=G.ztop && r>=G.Ri && r<=G.Ro) return "ヨーク側壁";
+  if (z>G.tb && z<=G.zpb && r<=G.Rm) return "マグネット";
+  if (z>G.zpb && z<=G.ztop && r<=G.Rp) return "トッププレート";
+  return "空気";
+}
+const sameParams = (a, b) => a && b && FIELDS.every(f => String(a[f.k]) === String(b[f.k]));
+
+// ------------------------------------------------------------ カラーマップ (viridis 近似)
+const VIR = [[68,1,84],[65,68,135],[42,120,142],[34,168,132],[122,209,81],[253,231,37]];
+function cmap(t){
+  t = Math.max(0, Math.min(1, t)) * (VIR.length-1);
+  const i = Math.min(VIR.length-2, Math.floor(t)), f = t - i, a = VIR[i], b = VIR[i+1];
+  return [0,1,2].map(k => Math.round(a[k] + (b[k]-a[k])*f));
+}
+function drawColorbar(){
+  const c = $("#cbar"), ctx = c.getContext("2d");
+  for (let x=0; x<c.width; x++){ const [r,g,b] = cmap(x/(c.width-1)); ctx.fillStyle=`rgb(${r},${g},${b})`; ctx.fillRect(x,0,1,c.height); }
+  $("#cbarmax").textContent = BMAX.toFixed(1) + " T";
+}
+let mapURL = null, mapFor = null;
+function mapImage(res){
+  if (mapFor === res) return mapURL;
+  const m = res.map, c = document.createElement("canvas"); c.width = m.nr; c.height = m.nz;
+  const ctx = c.getContext("2d"), img = ctx.createImageData(m.nr, m.nz);
+  for (let j=0; j<m.nz; j++) for (let i=0; i<m.nr; i++){
+    const k = j*m.nr + i, B = Math.hypot(m.br[k], m.bz[k]), [r,g,b] = cmap(B/BMAX);
+    const o = ((m.nz-1-j)*m.nr + i) * 4; img.data[o]=r; img.data[o+1]=g; img.data[o+2]=b; img.data[o+3]=255;
+  }
+  ctx.putImageData(img, 0, 0);
+  mapURL = c.toDataURL(); mapFor = res; return mapURL;
+}
+function sampleMap(res, r, z){
+  const m = res.map, x = (Math.abs(r) - m.r0)/m.step, y = (z - m.z0)/m.step;
+  if (x < 0 || y < 0 || x > m.nr-1 || y > m.nz-1) return null;
+  const i = Math.min(m.nr-2, Math.floor(x)), j = Math.min(m.nz-2, Math.floor(y)), fx = x-i, fy = y-j;
+  const at = (a, ii, jj) => a[jj*m.nr + ii];
+  const bil = a => at(a,i,j)*(1-fx)*(1-fy) + at(a,i+1,j)*fx*(1-fy) + at(a,i,j+1)*(1-fx)*fy + at(a,i+1,j+1)*fx*fy;
+  return {br: bil(m.br) * (r < 0 ? -1 : 1), bz: bil(m.bz)};
+}
+
+// ------------------------------------------------------------ 断面図
+let view = null;
+function drawSection(p){
+  const svg = $("#section");
+  if (!p){ svg.innerHTML = `<text x="0" y="0" text-anchor="middle" style="font-size:1px">入力を修正してください</text>`; svg.setAttribute("viewBox","-12 -6 24 12"); view=null; return; }
+  const G = geom(p), mapOn = lastResult && lastResult.ok && sameParams(lastResult.params, p);
+  const coilTop = G.zcoil + p.coil_h/2;
+  const m = Math.max(2, 0.25*Math.max(G.Ro, G.ztop));
+  let zmin = -m, zmax = Math.max(G.ztop + m, coilTop + 1), rmax = G.Ro + m;
+  if (mapOn){ const mm = lastResult.map; zmin = Math.min(zmin, mm.z0); zmax = Math.max(zmax, mm.z0+(mm.nz-1)*mm.step); rmax = Math.max(rmax, mm.r0+(mm.nr-1)*mm.step); }
+  const vb = [-rmax, -zmax, 2*rmax, zmax-zmin];
+  svg.setAttribute("viewBox", vb.join(" "));
+  view = {G, p, mapOn};
+  const Y = z => -z;
+  const rectPath = (r0, z0, r1, z1) => `M${r0} ${Y(z0)}H${r1}V${Y(z1)}H${r0}Z`;
+  const both = d => `<path d="${d}"/><path d="${d}" transform="scale(-1,1)"/>`;
+  const yoke = `M0 ${Y(0)}H${G.Ro}V${Y(G.ztop)}H${G.Ri}V${Y(G.tb)}H0Z`;
+  const fillIron = mapOn ? "none" : "var(--iron)", fillMag = mapOn ? "none" : "var(--mag)";
+  let s = "";
+  if (mapOn){
+    const mm = lastResult.map, url = mapImage(lastResult), h = mm.step;
+    const x0 = mm.r0 - h/2, y0 = Y(mm.z0 + (mm.nz-1)*h + h/2), w = mm.nr*h, hh = mm.nz*h;
+    s += `<image href="${url}" x="${x0}" y="${y0}" width="${w}" height="${hh}" preserveAspectRatio="none"/>`;
+    s += `<image href="${url}" x="${x0}" y="${y0}" width="${w}" height="${hh}" preserveAspectRatio="none" transform="scale(-1,1)"/>`;
+  }
+  const stroke = mapOn ? "rgba(255,255,255,.85)" : "var(--iron-stroke)";
+  s += `<g class="part" fill="${fillIron}" style="stroke:${stroke}">${both(yoke)}${both(rectPath(0,G.zpb,G.Rp,G.ztop))}</g>`;
+  s += `<g class="part" fill="${fillMag}" style="stroke:${stroke}">${both(rectPath(0,G.tb,G.Rm,G.zpb))}</g>`;
+  // 着磁方向の矢印
+  const ax = G.Rm*0.8, az0 = G.tb + p.magnet_t*0.2, az1 = G.tb + p.magnet_t*0.8, aw = Math.min(0.6, p.magnet_t*0.15);
+  const arrow = `M${ax} ${Y(az0)}V${Y(az1)} M${ax-aw} ${Y(az1-aw)}L${ax} ${Y(az1)}L${ax+aw} ${Y(az1-aw)}`;
+  s += `<g fill="none" stroke="${mapOn?"#fff":"#fff"}" stroke-width="0.15">${both(arrow)}</g>`;
+  // ボイスコイル
+  const cw = Math.min(p.gap*0.5, 0.6);
+  s += `<g fill="${mapOn?"none":"var(--coil)"}" stroke="${mapOn?"#ff9f1c":"#a86b12"}" stroke-width="0.08" ${mapOn?'stroke-dasharray="0.25 0.15"':""}>${both(rectPath(G.rgap-cw/2, G.zcoil-p.coil_h/2, G.rgap+cw/2, G.zcoil+p.coil_h/2))}</g>`;
+  // 中心軸
+  s += `<line x1="0" x2="0" y1="${Y(zmin)}" y2="${Y(zmax)}" stroke="#888" stroke-width="0.05" stroke-dasharray="0.6 0.25 0.1 0.25"/>`;
+  if (!mapOn){
+    const fs = Math.max(0.55, vb[2]/55);
+    const t = (x, z, txt, anchor="middle") => `<text x="${x}" y="${Y(z)}" text-anchor="${anchor}" dominant-baseline="middle" style="font-size:${fs}px">${txt}</text>`;
+    s += t(G.Rm/2, (G.tb+G.zpb)/2 - fs*1.2, "マグネット");
+    s += t(G.Rp/2, (G.zpb+G.ztop)/2, "プレート");
+    s += t(G.Ro/2, G.tb/2, "ヨーク");
+    s += t(G.rgap, G.zcoil + p.coil_h/2 + fs*0.9, "コイル");
+    s += t(-rmax + 0.5, zmax - fs, `外径 φ${fmt(2*G.Ro,1)} × 高さ ${fmt(G.ztop,1)} mm`, "start");
+  }
+  svg.innerHTML = s;
+  $("#mapnote").textContent = !lastResult ? "未解析" : mapOn ? `|B| マップ表示中（マウスで値を表示）` : "入力が解析時と異なるためマップ非表示";
+}
+function svgPoint(evt){
+  const svg = $("#section"), pt = svg.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY;
+  const q = pt.matrixTransform(svg.getScreenCTM().inverse()); return {r:q.x, z:-q.y};
+}
+function onHover(evt){
+  const tip = $("#tip");
+  if (!view){ tip.style.display="none"; return; }
+  const {r, z} = svgPoint(evt), part = partAt(view.G, r, z);
+  let txt = `r = ${fmt(Math.abs(r),2)} mm  z = ${fmt(z,2)} mm\n${part}`;
+  if (view.mapOn){
+    const b = sampleMap(lastResult, r, z);
+    if (b) txt += `\n|B| = ${fmt(Math.hypot(b.br,b.bz),3)} T\nBr = ${fmt(Math.abs(r)<1e-9?0:b.br,3)}  Bz = ${fmt(b.bz,3)} T`;
+  }
+  const wrap = $("#svgwrap").getBoundingClientRect();
+  tip.textContent = txt; tip.style.display = "block";
+  let x = evt.clientX - wrap.left + 14, y = evt.clientY - wrap.top + 14;
+  if (x + tip.offsetWidth > wrap.width) x -= tip.offsetWidth + 28;
+  if (y + tip.offsetHeight > wrap.height) y -= tip.offsetHeight + 28;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+
+// ------------------------------------------------------------ グラフ
+function lineChart(o){
+  // o: {xs, ys, xlabel, ylabel, hlines:[{y,label}], vlines:[{x,label}], bands:[{x0,x1,label}], fmtY}
+  const W = 380, H = 190, L = 44, R = 10, T = 12, B = 30;
+  const xmin = Math.min(...o.xs), xmax = Math.max(...o.xs);
+  let ymin = Math.min(0, ...o.ys), ymax = Math.max(...o.ys);
+  if (ymax - ymin < 1e-9) ymax = ymin + 1;
+  ymax += (ymax-ymin)*0.08;
+  const X = x => L + (x-xmin)/(xmax-xmin)*(W-L-R), Y = y => T + (ymax-y)/(ymax-ymin)*(H-T-B);
+  const ticks = (a, b, n) => { const st = Math.pow(10, Math.floor(Math.log10((b-a)/n))); const m = [1,2,5,10].find(k => (b-a)/(st*k) <= n) * st; const out=[]; for (let v=Math.ceil(a/m)*m; v<=b+1e-9; v+=m) out.push(+v.toFixed(10)); return out; };
+  let s = "";
+  for (const b of o.bands||[]) s += `<rect x="${X(b.x0)}" y="${T}" width="${X(b.x1)-X(b.x0)}" height="${H-T-B}" fill="${b.color||"#eef0f4"}"/><text x="${(X(b.x0)+X(b.x1))/2}" y="${T+9}" text-anchor="middle">${b.label}</text>`;
+  for (const v of ticks(ymin, ymax, 5)) s += `<line class="grid" x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${L-4}" y="${Y(v)+3}" text-anchor="end">${+v.toFixed(3)}</text>`;
+  for (const v of ticks(xmin, xmax, 7)) s += `<line class="grid" x1="${X(v)}" x2="${X(v)}" y1="${T}" y2="${H-B}"/><text x="${X(v)}" y="${H-B+12}" text-anchor="middle">${+v.toFixed(3)}</text>`;
+  s += `<line class="axis" x1="${L}" x2="${W-R}" y1="${Y(0)}" y2="${Y(0)}"/>`;
+  for (const h of o.hlines||[]) s += `<line x1="${L}" x2="${W-R}" y1="${Y(h.y)}" y2="${Y(h.y)}" stroke="${h.color||"#c53030"}" stroke-dasharray="4 3"/><text x="${W-R-2}" y="${Y(h.y)-3}" text-anchor="end" style="fill:${h.color||"#c53030"}">${h.label}</text>`;
+  for (const v of o.vlines||[]) s += `<line x1="${X(v.x)}" x2="${X(v.x)}" y1="${T}" y2="${H-B}" stroke="${v.color||"#c53030"}" stroke-dasharray="2 2"/><text x="${X(v.x)+3}" y="${H-B-4}" style="fill:${v.color||"#c53030"}">${v.label}</text>`;
+  const d = o.xs.map((x,i)=>`${i?"L":"M"}${X(x).toFixed(1)} ${Y(o.ys[i]).toFixed(1)}`).join("");
+  s += `<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`;
+  s += `<text x="${(L+W-R)/2}" y="${H-4}" text-anchor="middle">${o.xlabel}</text><text x="10" y="${T+(H-T-B)/2}" text-anchor="middle" transform="rotate(-90 10 ${T+(H-T-B)/2})">${o.ylabel}</text>`;
+  s += `<g class="hov" style="display:none"><line y1="${T}" y2="${H-B}" stroke="#555"/><circle r="3.5" fill="var(--accent)" stroke="#fff"/><text y="${T+20}" style="fill:var(--ink);font-weight:600"></text></g>`;
+  s += `<rect class="hit" x="${L}" y="${T}" width="${W-L-R}" height="${H-T-B}" fill="transparent"/>`;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("class","chart"); svg.innerHTML = s;
+  const hov = svg.querySelector(".hov");
+  svg.querySelector(".hit").addEventListener("mousemove", e => {
+    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const q = pt.matrixTransform(svg.getScreenCTM().inverse()), x = xmin + (q.x-L)/(W-L-R)*(xmax-xmin);
+    let i = 0, best = Infinity; o.xs.forEach((v,k)=>{ const dd = Math.abs(v-x); if (dd<best){best=dd;i=k;} });
+    const px = X(o.xs[i]), py = Y(o.ys[i]);
+    hov.style.display = ""; hov.querySelector("line").setAttribute("x1",px); hov.querySelector("line").setAttribute("x2",px);
+    hov.querySelector("circle").setAttribute("cx",px); hov.querySelector("circle").setAttribute("cy",py);
+    const t = hov.querySelector("text"); t.textContent = o.hoverText(o.xs[i], o.ys[i]);
+    t.setAttribute("x", px > W/2 ? px-6 : px+6); t.setAttribute("text-anchor", px > W/2 ? "end" : "start");
+  });
+  svg.querySelector(".hit").addEventListener("mouseleave", () => hov.style.display = "none");
+  return svg;
+}
+
+// ------------------------------------------------------------ 結果表示
+function delta(cur, prev, d, unit=""){
+  if (prev === undefined || prev === null || cur === null) return "";
+  const dv = cur - prev; if (Math.abs(dv) < Math.pow(10,-d)/2) return `<div class="d">前回比 ±0</div>`;
+  return `<div class="d ${dv>0?"up":"down"}">前回比 ${dv>0?"+":""}${dv.toFixed(d)}${unit}</div>`;
+}
+function renderResults(res, prevSummary){
+  const el = $("#results");
+  if (!res){ el.innerHTML = `<div class="empty">「解析」を押すと結果が表示されます</div>`; return; }
+  const S = res.summary, M = res.mass, P = prevSummary || {};
+  const card = (k, v, u, d) => `<div class="card"><div class="k">${k}</div><div class="v">${v}<small>${u}</small></div>${d||""}</div>`;
+  el.innerHTML = `
+    <div class="cards">
+      ${card("ギャップ B（中心）", fmt(S.b_gap_center,3), "T", delta(S.b_gap_center, P.b_gap_center, 3))}
+      ${card("ギャップ B（プレート厚平均）", fmt(S.b_gap_avg,3), "T", delta(S.b_gap_avg, P.b_gap_avg, 3))}
+      ${card("Bl（静止位置）", fmt(S.bl0,3), "T·m", delta(S.bl0, P.bl0, 3))}
+      ${card(`Xmax（Bl ${Math.round(CFG.xmax_ratio*100)}%）`, S.xmax===null?"範囲外":"±"+fmt(S.xmax,2), "mm", delta(S.xmax, P.xmax, 2))}
+    </div>
+    <div class="sec">
+      <table>
+        <tr><td>Xmax 上側 / 下側</td><td class="num">+${fmt(S.xmax_plus,2)} / −${fmt(S.xmax_minus,2)} mm</td></tr>
+        <tr><td>Bl ピーク</td><td class="num">${fmt(S.bl_peak,3)} T·m</td></tr>
+        <tr><td>コイル半径 / 線長</td><td class="num">${fmt(S.coil_radius,2)} mm / ${fmt(S.wire_length_m,2)} m</td></tr>
+        <tr><td>オーバーハング</td><td class="num">${fmt(S.overhang,2)} mm</td></tr>
+        <tr><td>解析時間 / 方式</td><td class="num">${fmt(res.elapsed_s,1)} s / ${res.backend==="mock"?"MOCK（参考値）":"FEMM"}</td></tr>
+      </table>
+      <h3>Bl(x)（コイル変位 x, 上が +）</h3><div id="chBl"></div>
+      <h3>ギャップ中心 Br(z)（r = ${fmt(res.br_z.r,2)} mm）</h3><div id="chBr"></div>
+      <h3>鉄の飽和判定 <span style="font-weight:400;color:var(--sub)">（判定は 95% 値: &lt;${CFG.sat_warn} T OK, &lt;${CFG.sat_limit} T 注意）</span></h3>
+      <table>
+        <tr><th>部位</th><th>平均</th><th>95%</th><th>最大</th><th>判定</th></tr>
+        ${res.iron.map(r => r.n ? `<tr><td>${r.part}</td><td class="num">${fmt(r.b_mean,2)}</td><td class="num">${fmt(r.b95,2)}</td><td class="num">${fmt(r.b_max,2)}</td><td><span class="chip ${r.status}">${r.status}</span></td></tr>` : `<tr><td>${r.part}</td><td colspan="4">サンプル点なし</td></tr>`).join("")}
+      </table>
+      <h3>質量</h3>
+      <table>
+        <tr><th>ヨーク</th><th>プレート</th><th>マグネット</th><th>合計</th></tr>
+        <tr><td class="num" style="text-align:right">${fmt(M.yoke,1)} g</td><td class="num">${fmt(M.plate,1)} g</td><td class="num">${fmt(M.magnet,1)} g</td><td class="num"><b>${fmt(M.total,1)} g</b></td></tr>
+      </table>
+    </div>`;
+  const bl0 = Math.abs(S.bl0), vl = [];
+  if (S.xmax_plus !== null) vl.push({x:S.xmax_plus, label:`+${fmt(S.xmax_plus,2)}`});
+  if (S.xmax_minus !== null) vl.push({x:-S.xmax_minus, label:`−${fmt(S.xmax_minus,2)}`});
+  $("#chBl").appendChild(lineChart({xs:res.bl_x.x, ys:res.bl_x.bl.map(Math.abs), xlabel:"x [mm]", ylabel:"Bl [T·m]",
+    hlines:[{y:bl0*CFG.xmax_ratio, label:`${Math.round(CFG.xmax_ratio*100)}%`}], vlines:vl,
+    hoverText:(x,y)=>`x=${fmt(x,1)} Bl=${fmt(y,3)} (${fmt(100*y/bl0,0)}%)`}));
+  const G = res.geometry, p = res.params;
+  $("#chBr").appendChild(lineChart({xs:res.br_z.z, ys:res.br_z.br, xlabel:"z [mm]（ヨーク底面 = 0）", ylabel:"Br [T]",
+    bands:[{x0:G.zpb, x1:G.ztop, label:"プレート", color:"#e6eaf2"},
+           {x0:G.zcoil-p.coil_h/2, x1:G.zcoil+p.coil_h/2, label:"", color:"rgba(232,163,61,.15)"}],
+    hoverText:(x,y)=>`z=${fmt(x,1)} Br=${fmt(y,3)} T`}));
+}
+
+// ------------------------------------------------------------ 履歴 (localStorage)
+const HKEY = "spkFemm.history.v1";
+function loadHist(){ try { return JSON.parse(localStorage.getItem(HKEY) || "[]"); } catch { return []; } }
+function saveHist(h){ try { localStorage.setItem(HKEY, JSON.stringify(h.slice(0, 100))); } catch {} }
+let history = loadHist();
+let currentId = null;
+function diffText(cur, prev){
+  if (!prev) return "（初回）";
+  const out = [];
+  for (const f of FIELDS) if (String(cur[f.k]) !== String(prev[f.k])) out.push(`${LABELS[f.k]} ${prev[f.k]}→${cur[f.k]}`);
+  return out.length ? out.join("、") : "変更なし";
+}
+function renderHist(){
+  $("#histcount").textContent = history.length ? `${history.length} 件` : "";
+  if (!history.length){ $("#history").innerHTML = `<div class="empty">まだ解析履歴はありません</div>`; return; }
+  const rows = history.map((h, i) => {
+    const S = h.summary, t = new Date(h.time);
+    const sat = (h.iron||[]).filter(r => r.status && r.status!=="OK").map(r => `${r.part}:${r.status}`).join(" ") || "OK";
+    return `<tr class="${h.id===currentId?"cur":""}"><td>${history.length - i}</td><td>${t.toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"})}</td>
+      <td class="chg">${esc(diffText(h.params, history[i+1] && history[i+1].params))}</td>
+      <td class="num">${fmt(S.b_gap_center,3)}</td><td class="num">${fmt(S.bl0,3)}</td><td class="num">${S.xmax===null?"—":fmt(S.xmax,2)}</td>
+      <td class="num">${fmt(h.mass && h.mass.total,1)}</td><td>${esc(sat)}</td><td>${h.backend==="mock"?"MOCK":"FEMM"}</td>
+      <td><button data-load="${h.id}">読込</button> <button data-del="${h.id}" title="削除">×</button></td></tr>`;
+  }).join("");
+  $("#history").innerHTML = `<table id="hist"><tr><th>#</th><th>日時</th><th>前回からの変更点</th><th>B gap [T]</th><th>Bl [T·m]</th><th>Xmax [mm]</th><th>質量 [g]</th><th>鉄</th><th>方式</th><th></th></tr>${rows}</table>`;
+}
+$("#history").addEventListener("click", e => {
+  const id = e.target.dataset.load || e.target.dataset.del; if (!id) return;
+  const h = history.find(x => x.id === id); if (!h) return;
+  if (e.target.dataset.load){ setParams(h.params); setStatus(`履歴 #${history.length - history.indexOf(h)} のパラメータを読み込みました`); }
+  else { history = history.filter(x => x.id !== id); saveHist(history); renderHist(); }
+});
+$("#clearhist").addEventListener("click", () => { if (history.length && confirm("解析履歴をすべて削除しますか？")){ history = []; saveHist(history); renderHist(); } });
+
+// ------------------------------------------------------------ 解析実行
+function setStatus(html){ $("#status").innerHTML = html; }
+async function runAnalysis(){
+  const p = readParams(); if (validate(p).e.length || running) return;
+  running = true; $("#run").disabled = true;
+  const t0 = performance.now();
+  const timer = setInterval(() => setStatus(`<span class="spinner"></span>解析中… ${((performance.now()-t0)/1000).toFixed(0)} s`), 250);
+  try {
+    const r = await fetch("/api/analyze", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(p)});
+    const res = await r.json();
+    if (!res.ok) throw new Error((res.errors || ["不明なエラー"]).join("\n"));
+    const prev = history[0];
+    lastResult = res;
+    const entry = {id: String(Date.now()), time: Date.now(), params: res.params, summary: res.summary, mass: res.mass,
+                   iron: res.iron.map(x => ({part:x.part, status:x.status})), backend: res.backend};
+    history.unshift(entry); saveHist(history); currentId = entry.id;
+    renderResults(res, prev && prev.summary); renderHist(); onInput();
+    setStatus(`解析完了（${fmt(res.elapsed_s,1)} s）`);
+  } catch (err) {
+    setStatus(`<span style="color:var(--bad)">解析失敗: ${esc(err.message)}</span>`);
+  } finally {
+    clearInterval(timer); running = false; onInput();
+  }
+}
+
+// ------------------------------------------------------------ 起動
+async function init(){
+  try {
+    const c = await (await fetch("/api/config")).json();
+    Object.assign(CFG, c);
+    const b = $("#backend"); b.textContent = c.backend === "mock" ? "MOCK（FEMM 未使用・参考値）" : "FEMM 4.2";
+    b.className = "badge " + c.backend;
+  } catch { $("#backend").textContent = "サーバ未接続"; }
+  buildForm(); drawColorbar();
+  setParams(history[0] ? history[0].params : CFG.defaults);
+  renderHist();
+  $("#run").addEventListener("click", runAnalysis);
+  $("#reset").addEventListener("click", () => setParams(CFG.defaults));
+  $("#section").addEventListener("mousemove", onHover);
+  $("#section").addEventListener("mouseleave", () => $("#tip").style.display = "none");
+  new ResizeObserver(() => {}).observe($("#section"));
+}
+init();
+</script>
+</body>
+</html>
