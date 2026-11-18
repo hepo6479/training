@@ -18,6 +18,7 @@ header{display:flex;align-items:center;gap:12px;padding:8px 16px;background:var(
 header h1{font-size:15px;margin:0;font-weight:600}
 .badge{font-size:11px;padding:2px 8px;border-radius:10px;background:var(--soft);color:var(--sub);font-weight:600}
 .badge.femm{background:#e3f4ea;color:var(--ok)}
+.badge.xfemm{background:#e3f4ea;color:var(--ok)}
 .badge.getdp{background:#e6eefc;color:var(--accent)}
 .badge.mock{background:#fdf0dc;color:var(--warn)}
 #status{margin-left:auto;color:var(--sub)}
@@ -155,8 +156,8 @@ let CFG = {
   magnet_types:{NdFeB:{br_range:[0.9,1.55]},Ferrite:{br_range:[0.2,0.5]}},
   xmax_ratio:0.82, sat_warn:1.5, sat_limit:1.8, backend:"?"
 };
-const BACKEND_LABEL = {femm:"FEMM 4.2", getdp:"Gmsh + GetDP", mock:"MOCK（解析ソフト未使用・参考値）"};
-const BACKEND_SHORT = {femm:"FEMM", getdp:"GetDP", mock:"MOCK"};
+const BACKEND_LABEL = {femm:"FEMM 4.2", xfemm:"xfemm（FEMM ソルバ）", getdp:"Gmsh + GetDP", mock:"MOCK（解析ソフト未使用・参考値）"};
+const BACKEND_SHORT = {femm:"FEMM", xfemm:"xfemm", getdp:"GetDP", mock:"MOCK"};
 const BMAX = 2.0; // カラースケール上限 [T]
 let lastResult = null;
 let running = false;

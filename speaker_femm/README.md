@@ -3,6 +3,32 @@
 カップ形ヨーク + 円板マグネット (+z 着磁) + トッププレートの軸対称静磁場解析を
 FEMM または Gmsh + GetDP で実行し、ブラウザで結果を見るローカル Web ツール。
 
+## 解析方式
+
+| 方式 | OS | ソルバ | 1 回の解析 (基準値) |
+|---|---|---|---|
+| `femm` | Windows | FEMM 4.2 本体 (pyfemm / COM) | 未計測 |
+| `xfemm` | macOS / Linux | FEMM のソルバの移植版 (femmcli) | 約 0.4 秒 |
+| `getdp` | macOS / Linux / Windows | Gmsh + GetDP | 約 1.3 秒 |
+| `mock` | どれでも | なし (UI 確認用の合成値) | — |
+
+`python server.py` は femm → xfemm → getdp の順に使えるものを自動で選ぶ。`--backend xfemm` のように指定もできる。
+
+## 使い方 (macOS / Linux: xfemm)
+
+```
+git clone https://github.com/crobarcro/xfemm.git
+cd xfemm/cfemm && mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release   # ビルド中に依存ライブラリをダウンロードする
+make femmcli-bin                       # → xfemm/cfemm/bin/femmcli
+export FEMMCLI=/path/to/xfemm/cfemm/bin/femmcli   # または PATH に置く
+cd speaker_femm && python3 server.py --backend xfemm
+```
+
+macOS では Xcode のコマンドラインツールと cmake (`brew install cmake`) が必要。
+macOS でのビルドは未確認 (Linux では確認済み)。鉄の材料は `bh_data.py` から定義するので、
+xfemm の材料ライブラリ (matlib.dat) の置き場所の設定は不要。
+
 ## 使い方 (macOS / Linux: Gmsh + GetDP)
 
 ```
@@ -38,9 +64,11 @@ FEMM 4.2 は `C:\femm42` に通常インストールされている前提 (pyfem
 | `server.py` | 標準ライブラリのみの HTTP サーバ。FEMM 専用ワーカースレッドで CoInitialize、ロックで排他制御 |
 | `static/index.html` | 外部ライブラリなしの UI (入力・断面図 SVG・結果・履歴) |
 | `getdp_model.py` | Gmsh でメッシュ、GetDP で解析する版。`analyze(params)` は femm_model と同じ形の結果を返す |
+| `xfemm_model.py` | femm_model の pyfemm 呼び出しを Lua に書き出して xfemm (femmcli) で解く版 |
+| `xfemm_compare.py` | xfemm 版と GetDP 版を同じ条件で解いて比べる |
 | `bh_data.py` | FEMM 材料ライブラリ (matlib.dat) から写した鉄の B-H カーブ |
 | `mock_femm.py` | FEMM 無しで動かすための pyfemm 互換モック |
-| `tests/` | モックで形状と後処理を検査 (`test_model.py`)、GetDP 版を解析解・基準値・メッシュ収束で検査 (`test_getdp.py`) |
+| `tests/` | モックで形状と後処理を検査 (`test_model.py`)、GetDP 版を解析解・基準値・メッシュ収束で検査 (`test_getdp.py`)、xfemm 版を基準値と GetDP との一致で検査 (`test_xfemm.py`) |
 
 ## モデル
 
@@ -80,8 +108,8 @@ FEMM 4.2 は `C:\femm42` に通常インストールされている前提 (pyfem
 
 ## xfemm (FEMM のソルバ) との比較
 
-`xfemm_compare.py` は femm_model.py の pyfemm 呼び出しを Lua に書き出して xfemm の `femmcli` で解き、
-同じ点で B を読んで GetDP 版と比べる (`python xfemm_compare.py <femmcli> <matlib.dat のディレクトリ>`)。
+`xfemm_compare.py` は xfemm 版と GetDP 版を同じ条件で解いて比べる
+(`python xfemm_compare.py '[{"gap": 0.8}]'`)。B は両方とも femm_model.postprocess と同じ点で読む。
 
 | ケース | ギャップ B 中心 xfemm / GetDP | Bl0 | Xmax |
 |---|---|---|---|

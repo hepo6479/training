@@ -2,6 +2,7 @@
 
     python server.py                    # 解析ソフトを自動選択。http://127.0.0.1:8765/
     python server.py --backend femm     # FEMM 4.2 (pyfemm, Windows)
+    python server.py --backend xfemm    # xfemm (FEMM のソルバの移植版, macOS / Linux)
     python server.py --backend getdp    # Gmsh + GetDP (macOS / Linux / Windows)
     python server.py --backend mock     # 解析ソフト無しのモック (UI 確認用)
 
@@ -45,9 +46,8 @@ class FemmWorker:
             return None
 
     def _open(self):
-        if self.backend == "getdp":
-            import getdp_model
-            self.femm = getdp_model
+        if self.backend in ("getdp", "xfemm"):
+            self.femm = __import__(self.backend + "_model")
             return
         if self.mock:
             import mock_femm
@@ -73,7 +73,7 @@ class FemmWorker:
                 try:
                     if self.femm is None:
                         self._open()
-                    if self.backend == "getdp":
+                    if self.backend in ("getdp", "xfemm"):
                         box["result"] = self.femm.analyze(params)
                     else:
                         box["result"] = femm_model.analyze(params, femm=self.femm, keep_open=True)
@@ -162,29 +162,33 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8765)
-    ap.add_argument("--backend", choices=["auto", "femm", "getdp", "mock"], default="auto",
-                    help="解析ソフト (auto: Windows で pyfemm があれば FEMM、なければ GetDP)")
+    ap.add_argument("--backend", choices=["auto", "femm", "xfemm", "getdp", "mock"], default="auto",
+                    help="解析ソフト (auto: Windows で pyfemm があれば FEMM、なければ xfemm、なければ GetDP)")
     ap.add_argument("--mock", action="store_true", help="--backend mock と同じ")
     a = ap.parse_args()
     backend = "mock" if a.mock else a.backend
-    femm_err = getdp_err = None
+    errs = {}
     if backend in ("auto", "femm"):
         try:
             import femm  # noqa: F401
             if sys.platform != "win32" and backend == "auto":
-                femm_err = "Windows 以外では FEMM を自動選択しません (--backend femm で強制)"
+                errs["femm"] = "Windows 以外では FEMM を自動選択しません (--backend femm で強制)"
         except ImportError:
-            femm_err = "pyfemm が見つかりません (pip install pyfemm pywin32)"
-        if backend == "femm" and femm_err and "Windows" not in femm_err:
-            sys.exit(femm_err)
-        if backend == "auto":
-            backend = "femm" if not femm_err else "getdp"
-    if backend == "getdp":
-        import getdp_model
-        getdp_err = getdp_model.available()
-        if getdp_err:
-            sys.exit((f"FEMM: {femm_err}\n" if femm_err else "") + f"GetDP: {getdp_err}\n"
-                     "--backend mock で UI だけ試せます。")
+            errs["femm"] = "pyfemm が見つかりません (pip install pyfemm pywin32)"
+        if backend == "femm" and "femm" in errs and "Windows" not in errs["femm"]:
+            sys.exit(errs["femm"])
+        if backend == "auto" and "femm" not in errs:
+            backend = "femm"
+    for name in ("xfemm", "getdp"):
+        if backend in ("auto", name):
+            mod = __import__(name + "_model")
+            err = mod.available()
+            if err:
+                errs[name] = err
+            else:
+                backend = name
+    if backend == "auto" or backend in errs:
+        sys.exit("".join(f"{k}: {v}\n" for k, v in errs.items()) + "--backend mock で UI だけ試せます。")
     Handler.worker = FemmWorker(backend)
     srv = ThreadingHTTPServer((a.host, a.port), Handler)
     print(f"{backend.upper()} で起動: http://{a.host}:{a.port}/  (Ctrl+C で終了)")
