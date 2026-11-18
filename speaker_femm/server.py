@@ -1,7 +1,9 @@
 """ローカル Web サーバ (Python 標準ライブラリのみ)
 
-    python server.py            # FEMM (pyfemm) で解析。http://127.0.0.1:8765/
-    python server.py --mock     # FEMM 無しでモック解析 (UI 確認用)
+    python server.py                    # 解析ソフトを自動選択。http://127.0.0.1:8765/
+    python server.py --backend femm     # FEMM 4.2 (pyfemm, Windows)
+    python server.py --backend getdp    # Gmsh + GetDP (macOS / Linux / Windows)
+    python server.py --backend mock     # 解析ソフト無しのモック (UI 確認用)
 
 FEMM は COM (ActiveX) で動くため、FEMM を触るのは専用ワーカースレッド 1 本だけにし、
 そのスレッドで CoInitialize してから openfemm する (COM のアパートメントはスレッド単位)。
@@ -23,8 +25,9 @@ STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
 
 class FemmWorker:
-    def __init__(self, mock):
-        self.mock = mock
+    def __init__(self, backend):
+        self.backend = backend
+        self.mock = backend == "mock"
         self.lock = threading.Lock()   # 排他制御: 同時に 1 解析だけ
         self.jobs = queue.Queue()
         self.femm = None
@@ -42,6 +45,10 @@ class FemmWorker:
             return None
 
     def _open(self):
+        if self.backend == "getdp":
+            import getdp_model
+            self.femm = getdp_model
+            return
         if self.mock:
             import mock_femm
             self.femm = mock_femm
@@ -51,7 +58,7 @@ class FemmWorker:
         self.femm = femm
 
     def _close(self):
-        if self.femm is not None and not self.mock:
+        if self.femm is not None and self.backend == "femm":
             try:
                 self.femm.closefemm()
             except Exception:
@@ -66,7 +73,10 @@ class FemmWorker:
                 try:
                     if self.femm is None:
                         self._open()
-                    box["result"] = femm_model.analyze(params, femm=self.femm, keep_open=True)
+                    if self.backend == "getdp":
+                        box["result"] = self.femm.analyze(params)
+                    else:
+                        box["result"] = femm_model.analyze(params, femm=self.femm, keep_open=True)
                 except Exception as e:  # FEMM が落ちた等: 次回開き直す
                     traceback.print_exc()
                     self._close()
@@ -118,7 +128,7 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/api/config":
             return self._json(200, {
-                "backend": "mock" if self.worker.mock else "femm",
+                "backend": self.worker.backend,
                 "busy": self.worker.busy,
                 "defaults": femm_model.DEFAULTS,
                 "iron_materials": femm_model.IRON_MATERIALS,
@@ -152,18 +162,32 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8765)
-    ap.add_argument("--mock", action="store_true", help="FEMM を使わずモック解析で動かす")
+    ap.add_argument("--backend", choices=["auto", "femm", "getdp", "mock"], default="auto",
+                    help="解析ソフト (auto: Windows で pyfemm があれば FEMM、なければ GetDP)")
+    ap.add_argument("--mock", action="store_true", help="--backend mock と同じ")
     a = ap.parse_args()
-    mock = a.mock
-    if not mock:
+    backend = "mock" if a.mock else a.backend
+    femm_err = getdp_err = None
+    if backend in ("auto", "femm"):
         try:
             import femm  # noqa: F401
+            if sys.platform != "win32" and backend == "auto":
+                femm_err = "Windows 以外では FEMM を自動選択しません (--backend femm で強制)"
         except ImportError:
-            print("pyfemm が見つかりません (pip install pyfemm)。--mock で UI だけ試せます。")
-            sys.exit(1)
-    Handler.worker = FemmWorker(mock)
+            femm_err = "pyfemm が見つかりません (pip install pyfemm pywin32)"
+        if backend == "femm" and femm_err and "Windows" not in femm_err:
+            sys.exit(femm_err)
+        if backend == "auto":
+            backend = "femm" if not femm_err else "getdp"
+    if backend == "getdp":
+        import getdp_model
+        getdp_err = getdp_model.available()
+        if getdp_err:
+            sys.exit((f"FEMM: {femm_err}\n" if femm_err else "") + f"GetDP: {getdp_err}\n"
+                     "--backend mock で UI だけ試せます。")
+    Handler.worker = FemmWorker(backend)
     srv = ThreadingHTTPServer((a.host, a.port), Handler)
-    print(f"{'MOCK' if mock else 'FEMM'} モードで起動: http://{a.host}:{a.port}/  (Ctrl+C で終了)")
+    print(f"{backend.upper()} で起動: http://{a.host}:{a.port}/  (Ctrl+C で終了)")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

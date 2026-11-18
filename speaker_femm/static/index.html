@@ -18,6 +18,7 @@ header{display:flex;align-items:center;gap:12px;padding:8px 16px;background:var(
 header h1{font-size:15px;margin:0;font-weight:600}
 .badge{font-size:11px;padding:2px 8px;border-radius:10px;background:var(--soft);color:var(--sub);font-weight:600}
 .badge.femm{background:#e3f4ea;color:var(--ok)}
+.badge.getdp{background:#e6eefc;color:var(--accent)}
 .badge.mock{background:#fdf0dc;color:var(--warn)}
 #status{margin-left:auto;color:var(--sub)}
 main{display:grid;grid-template-columns:290px minmax(360px,1fr) 400px;grid-template-rows:minmax(0,1fr) auto;gap:10px;padding:10px;height:calc(100% - 41px)}
@@ -154,6 +155,8 @@ let CFG = {
   magnet_types:{NdFeB:{br_range:[0.9,1.55]},Ferrite:{br_range:[0.2,0.5]}},
   xmax_ratio:0.82, sat_warn:1.5, sat_limit:1.8, backend:"?"
 };
+const BACKEND_LABEL = {femm:"FEMM 4.2", getdp:"Gmsh + GetDP", mock:"MOCK（解析ソフト未使用・参考値）"};
+const BACKEND_SHORT = {femm:"FEMM", getdp:"GetDP", mock:"MOCK"};
 const BMAX = 2.0; // カラースケール上限 [T]
 let lastResult = null;
 let running = false;
@@ -409,7 +412,7 @@ function renderResults(res, prevSummary){
         <tr><td>Bl ピーク</td><td class="num">${fmt(S.bl_peak,3)} T·m</td></tr>
         <tr><td>コイル半径 / 線長</td><td class="num">${fmt(S.coil_radius,2)} mm / ${fmt(S.wire_length_m,2)} m</td></tr>
         <tr><td>オーバーハング</td><td class="num">${fmt(S.overhang,2)} mm</td></tr>
-        <tr><td>解析時間 / 方式</td><td class="num">${fmt(res.elapsed_s,1)} s / ${res.backend==="mock"?"MOCK（参考値）":"FEMM"}</td></tr>
+        <tr><td>解析時間 / 方式</td><td class="num">${fmt(res.elapsed_s,1)} s / ${res.backend==="mock"?"MOCK（参考値）":BACKEND_SHORT[res.backend]||res.backend}${res.mesh?`（${res.mesh.elements} 要素・反復 ${res.mesh.iterations ?? "—"} 回）`:""}</td></tr>
       </table>
       <h3>Bl(x)（コイル変位 x, 上が +）</h3><div id="chBl"></div>
       <h3>ギャップ中心 Br(z)（r = ${fmt(res.br_z.r,2)} mm）</h3><div id="chBr"></div>
@@ -458,7 +461,7 @@ function renderHist(){
     return `<tr class="${h.id===currentId?"cur":""}"><td>${history.length - i}</td><td>${t.toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"})}</td>
       <td class="chg">${esc(diffText(h.params, history[i+1] && history[i+1].params))}</td>
       <td class="num">${fmt(S.b_gap_center,3)}</td><td class="num">${fmt(S.bl0,3)}</td><td class="num">${S.xmax===null?"—":fmt(S.xmax,2)}</td>
-      <td class="num">${fmt(h.mass && h.mass.total,1)}</td><td>${esc(sat)}</td><td>${h.backend==="mock"?"MOCK":"FEMM"}</td>
+      <td class="num">${fmt(h.mass && h.mass.total,1)}</td><td>${esc(sat)}</td><td>${BACKEND_SHORT[h.backend]||h.backend}</td>
       <td><button data-load="${h.id}">読込</button> <button data-del="${h.id}" title="削除">×</button></td></tr>`;
   }).join("");
   $("#history").innerHTML = `<table id="hist"><tr><th>#</th><th>日時</th><th>前回からの変更点</th><th>B gap [T]</th><th>Bl [T·m]</th><th>Xmax [mm]</th><th>質量 [g]</th><th>鉄</th><th>方式</th><th></th></tr>${rows}</table>`;
@@ -501,7 +504,7 @@ async function init(){
   try {
     const c = await (await fetch("/api/config")).json();
     Object.assign(CFG, c);
-    const b = $("#backend"); b.textContent = c.backend === "mock" ? "MOCK（FEMM 未使用・参考値）" : "FEMM 4.2";
+    const b = $("#backend"); b.textContent = BACKEND_LABEL[c.backend] || c.backend;
     b.className = "badge " + c.backend;
   } catch { $("#backend").textContent = "サーバ未接続"; }
   buildForm(); drawColorbar();
